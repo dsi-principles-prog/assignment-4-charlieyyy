@@ -1,0 +1,134 @@
+---
+title: "vehicle-classification"
+output: html_notebook
+---
+# objective 
+
+The purpose of this project is to classify a given silhouette as one of four types of vehicle,  using a set of fea-tures extracted from the silhouette. The vehicle may be viewed from one of many different angles.The features were extracted from the silhouettes by the HIPS (Hierarchical Image Processing Sys-tem) extension BINATTS, which extracts a combination of scale independent features utilising bothclassical moments based measures such as scaled variance, skewness and kurtosis about the ma-jor/minor axes and heuristic measures such as hollows, circularity, rectangularity and compactness.
+
+First of all, let us set up the packages and import the data.
+
+# import packages
+```{r import packages}
+library(tidyverse)
+library(dplyr)
+library(janitor)
+library(assertr)
+```
+
+
+# import data
+
+```{r import data}
+vehicle <- read.csv('Vehicle.csv')
+```
+
+
+# clean names
+```{r clean names}
+vehicle <- vehicle %>% clean_names()
+```
+
+
+
+# assert and verify data
+We want to make sure we have 19 variables(columns), and the class of car is not null. 
+```{r assert and verify data}
+vehicle %>% 
+  chain_start %>%
+  verify(ncol(vehicle)==19) %>% 
+  verify(!is.na(class)) %>% 
+  chain_end()
+```
+
+
+
+# data cleanning
+
+Let us see if all the columns are numeric except class.
+```{r str of data}
+str(vehicle)
+```
+That is great. Let us see if the each column has any null values, and replace NA with the average of the columns.
+
+```{r remove rows with NAs}
+vehicle %>% drop_na()
+```
+
+*Note: request to replace the score for the coding portion of Assignment 3.*
+
+# feature engieering: the absolute difference between scaled variance of major and scaled variance of minor axis 
+
+The first assumption is that the absolute difference between scaled variance of major and scaled variance of minor axis may be related to the types of cars. 
+```{r feature engineering 1}
+axis_svar_diff <- function(df, svar1, svar2){
+  df<- df %>% 
+    mutate(axis_svar_diff = abs({{svar1}} -{{svar2}}))
+}
+```
+
+# feature engieering: value of compactness over average value
+
+The first assumption is that the how much value of compactness over average value is may be related to the types of cars.
+```{r feature engineering 2}
+comp_ovr_avg<- function(df, comp){
+  df<- df %>% 
+    mutate(comp_ovr_avg = {{comp}}-mean({{comp}}))
+}
+```
+
+
+
+# feature engieering: value of elongatedness over average value
+The first assumption is that the how much value of elongatedness over average value is may be related to the types of cars.
+```{r feature engineering 3}
+elong_ovr_avg<- function(df, elong){
+  df<- df %>% 
+    mutate(elong_ovr_avg = {{elong}}-mean({{elong}}))
+}
+```
+
+
+# feature engieering: value of max.length rectangularity over average value
+The first assumption is that the how much value of max.length rectangularity over average value is may be related to the types of cars.
+
+```{r feature engineering 4}
+mlr_ovr_avg<- function(df, mlr){
+  df<- df %>% 
+    mutate(mlr_ovr_avg = {{mlr}}-mean({{mlr}}))
+}
+```
+
+
+
+# prepare the data for modelling
+
+Let us first generate the four features and check if it works.
+```{r create features}
+vehicle_features <- vehicle %>% 
+  axis_svar_diff(sc_var_maxis, sc_var_maxis_2) %>% 
+  comp_ovr_avg(comp) %>% 
+  elong_ovr_avg(elong) %>% 
+  mlr_ovr_avg(max_l_rect)
+names(vehicle_features)
+```
+
+Yes, it works! Now, let us create a table with only this four features and split the train and test data. 
+
+
+```{r feature table}
+vehicle_model <- vehicle_features %>% 
+  select(axis_svar_diff, comp_ovr_avg, elong_ovr_avg, mlr_ovr_avg)
+```
+
+
+```{r prepare train, validation and test set for modeling}
+set.seed(1015)
+train_sub <- sample(nrow(vehicle_model),0.7*nrow(vehicle_model))
+train_set <- vehicle_model[train_sub,]
+val_test_set <- vehicle_model[-train_sub,]
+val_sub <- sample(nrow(val_test_set), 0.5*nrow(val_test_set))
+val_set <- val_test_set[val_sub,]
+test_set <- val_test_set[-val_sub,]
+```
+
